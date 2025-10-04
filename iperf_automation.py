@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-
 #Make sure you have iperf3 excutable downloaded and make sure it's running before you run this code
-# Change iperf3_path to where yuor iperf3 is located
-
 # Below is the command to run this code
 # python iperf_automation.py <ip address> -p <port> -t <test length> -i <test interval> -o <saved folder>
 import json
@@ -12,9 +9,8 @@ import datetime
 import subprocess
 import argparse
 from pathlib import Path
-
 ##Runs both Download and Upload tests for 
-def run_tests(server_ip, port, duration, iperf3_path):
+def run_tests(server_ip, port, duration, iperf3_path, output_dir, test_count):
     results = {}
     
     # Download test
@@ -23,9 +19,12 @@ def run_tests(server_ip, port, duration, iperf3_path):
                         capture_output=True, text=True)
     data = json.loads(result.stdout)
     results['download_mbps'] = data['end']['sum_received']['bits_per_second'] / 1_000_000
-
+    
+    # Save raw JSON
+    with open(output_dir / f"raw_download_{test_count:03d}.json", 'w') as f:
+        f.write(result.stdout)
+    
     time.sleep(1)
-
     # Upload test  
     print("Running upload test...")
     result = subprocess.run([iperf3_path, '-c', server_ip, '-p', str(port), '-t', str(duration), '-J'], 
@@ -33,10 +32,13 @@ def run_tests(server_ip, port, duration, iperf3_path):
     data = json.loads(result.stdout)
     results['upload_mbps'] = data['end']['sum_sent']['bits_per_second'] / 1_000_000
     
+    # Save raw JSON
+    with open(output_dir / f"raw_upload_{test_count:03d}.json", 'w') as f:
+        f.write(result.stdout)
+    
     return results
-
 def save_to_csv(results, csv_file, test_number):
-    timestamp = datetime.datetime.now().isoformat()
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
     
     # If file csv file does not exist, create a new one
     if not csv_file.exists():
@@ -50,7 +52,6 @@ def save_to_csv(results, csv_file, test_number):
         csv.writer(f).writerow(row)
     
     print(f"Test #{test_number}: Down={results['download_mbps']:.2f} Mbps, Up={results['upload_mbps']:.2f} Mbps")
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('server_ip')
@@ -61,7 +62,7 @@ def main():
     
     args = parser.parse_args()
     
-    iperf3_path = r'C:\Users\aweso\OneDrive\Desktop\1School\Summer\2025\Research_Fabio\Project_HaLow\iperf_program\iperf3.exe'
+    iperf3_path = 'iperf3'
     
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
@@ -74,9 +75,8 @@ def main():
     test_count = 0
     while True:
         test_count += 1
-        results = run_tests(args.server_ip, args.port, args.duration, iperf3_path)
+        results = run_tests(args.server_ip, args.port, args.duration, iperf3_path, output_dir, test_count)
         save_to_csv(results, csv_file, test_count)
         time.sleep(args.interval)
-
 if __name__ == "__main__":
     main()
